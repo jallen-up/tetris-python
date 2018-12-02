@@ -1,8 +1,30 @@
+import random
 import pygame
 import time
 
-#class Piece:
-#    def __init__(self):
+line_piece = [[[0, 0, 1, 0],
+               [0, 0, 1, 0],
+               [0, 0, 1, 0],
+               [0, 0, 1, 0]],
+               [0, 0, 0, 0],
+               [0, 0, 0, 0],
+               [1, 1, 1, 1],
+               [0, 0, 0, 0]]]
+
+class Piece:
+    LINE_PIECE    = 0
+    SQUARE_PIECE  = 1
+    LEFT_L_PIECE  = 2
+    RIGHT_L_PIECE = 3
+    T_PIECE       = 4
+    LEFT_Z_PIECE  = 5
+    RIGHT_Z_PIECE = 6
+
+    def __init__(self):
+        self.shape = random.randint(0, 7)
+
+    def rotate(self):
+        `
 
 class GameState:
     def __init__(self):
