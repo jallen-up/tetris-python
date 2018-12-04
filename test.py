@@ -7,6 +7,16 @@ from PIL import Image
 block = pygame.image.load("block.png")
 screen = pygame.display.set_mode((160, 320))
 
+wallkick_offsets = [[(0, 0), (-1, 0), (-1, 1), (0, -2), (-1, -2)],
+                    [(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)],
+                    [(0, 0), (1, 0), (1, 1), (0, -2), (1, -2)],
+                    [(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)]]
+
+wallkick_offsets_i = [[(0, 0), (-2, 0), (1, 0), (-2, -1), (1, 2)],
+                    [(0, 0), (-1, 0), (2, 0), (-1, 2), (2, -1)],
+                    [(0, 0), (2, 0), (-1, 0), (2, 1), (-1, -2)],
+                    [(0, 0), (1, 0), (-2, 0), (1, -2), (-2, 1)]]
+
 # TODO: Rewrite how pieces are identified
 class Piece:
     LINE_PIECE    = 0
@@ -17,11 +27,12 @@ class Piece:
     LEFT_Z_PIECE  = 5
     RIGHT_Z_PIECE = 6
 
-    def __init__(self):
+    def __init__(self, state):
         self.shape = random.randint(0, 6)
         self.rot_index = 0
         self.x = 4
         self.y = 0
+        self.game_state = state
 
         if (self.shape == self.LINE_PIECE):
             self.rotations = Image.open('line.png').load()
@@ -48,18 +59,45 @@ class Piece:
             print("Invalid piece type")
             return None
 
-    def rotate(self, width, height):
-        self.rot_index += 1
-        if (self.rot_index == 4):
-            self.rot_index = 0
+    def get_next_rotation(self):
+        ret = self.rot_index + 1
+        if ret == 4:
+            ret = 0
 
+        return ret
+
+    def point_out_of_bounds(self, test):
+        if test[0] > self.game_state.board_width - 1:
+            return True
+        elif test[0] < 0:
+            return True
+        elif test[1] > self.game_state.board_height - 1:
+            return True
+        elif test[1] < 0:
+            return True
+        else:
+            return False
+
+    def rotation_unobstructed(self, test):
         for i in range(0, 4):
             for j in range(0, 4):
-                while self.rotations[i, (self.rot_index * 4) + j][0] == 0 and self.x + i > width - 1:
-                    self.x - 1
-                while self.rotations[i, (self.rot_index * 4) + j][0] == 0 and i <= 0:
-                    self.x + 1
-                
+                if (self.rotations[i, (self.get_next_rotation() * 4) + j][0] == 0 and self.game_state.board[self.x + i + test[0]][self.y + j + test[1]] != None) or self.point_out_of_bounds(test):
+                    return False
+
+        return True
+
+    def rotate(self, width, height):
+        can_rotate = False
+        for test in wallkick_offsets[self.get_next_rotation()]:
+            if self.rotation_unobstructed(test):
+                print("Rotation good")
+                can_rotate = True
+                break
+            else:
+                print("Rotation bad")
+
+        if can_rotate == True:
+            self.rot_index += 1
 
     def draw(self):
         for i in range(0, 4):
@@ -76,7 +114,7 @@ class GameState:
         self.running = True
         self.tick_count = 0
         self.tick_mod = 50
-        self.current_piece = Piece()
+        self.current_piece = Piece(self)
         if (self.current_piece == None):
             print("Failed to create piece")
         self.init_board()
@@ -99,7 +137,7 @@ class GameState:
 
         if (self.tick_count % self.tick_mod == 0):
             if self.drop_piece() == 1:
-                self.current_piece = Piece()
+                self.current_piece = Piece(self)
             self.tick_count = 0
 
         self.draw_screen()
