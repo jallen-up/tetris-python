@@ -70,14 +70,9 @@ class Piece:
         return ret
 
     def point_out_of_bounds(self, x, y):
-        print("point oob")
-        print(x)
-        print(y)
         if x > self.game_state.board_width - 1:
-            print("returning true")
             return True
         elif x < 0:
-            print("x less than 0")
             return True
         elif y > self.game_state.board_height - 1:
             return True
@@ -90,7 +85,6 @@ class Piece:
         for i in range(0, self.size):
             for j in range(0, self.size):
                 if self.rotations[i, (self.get_next_rotation() * self.size) + j][0] == 0:
-                        print(test)
                         if self.point_out_of_bounds(self.x + i + test[0], self.y + j + test[1]):
                             return False
                         if self.game_state.board[self.x + i + test[0]][self.y + j + test[1]] != None:
@@ -107,13 +101,10 @@ class Piece:
 
         for test in offsets[self.get_next_rotation()]:
             if self.rotation_unobstructed(test):
-                print("Rotation good")
-                can_rotate = True
                 self.x += test[0]
                 self.y += test[1]
+                can_rotate = True
                 break
-            else:
-                print("Rotation bad")
 
         if can_rotate == True:
             self.rot_index += 1
@@ -134,7 +125,7 @@ class GameState:
     def __init__(self):
         self.running = True
         self.tick_count = 0
-        self.tick_mod = 200
+        self.tick_mod = 25
         self.current_piece = Piece(self)
         if (self.current_piece == None):
             print("Failed to create piece")
@@ -159,32 +150,56 @@ class GameState:
         if (self.tick_count % self.tick_mod == 0):
             if self.drop_piece() == 1:
                 self.current_piece = Piece(self)
+                num_rows = self.check_filled_rows()
             self.tick_count = 0
 
         self.draw_screen()
 
+    def check_filled_rows(self):
+        ret = 0
+        marked_rows = []
+        for i in range(self.board_height):
+            count = 0
+            for j in range(self.board_width):
+                if self.board[j][i] != None:
+                    count += 1
+
+            if count == 10:
+                marked_rows.append(i)
+                ret += 1
+        
+        for row in marked_rows:
+             for i in reversed(range(0, row + 1)):
+                 for j in range(self.board_width):
+                     self.board[j][i] = None
+                     self.board[j][i] = self.board[j][i - 1]
+                     self.board[j][i - 1] = None
+        return ret
+
     def attempt_move_right(self):
         for i in range(0, self.current_piece.size):
             for j in range(0, self.current_piece.size):
-                if self.current_piece.rotations[i, (self.current_piece.get_next_rotation() * self.current_piece.size) + j][0] == 0:
-                    print("Current location")
-                    print(self.current_piece.x + i + 1)
-                    print(self.current_piece.y + j)
+                if self.current_piece.rotations[i, (self.current_piece.rot_index * self.current_piece.size) + j][0] == 0:
                     if self.current_piece.point_out_of_bounds(self.current_piece.x + i + 1, self.current_piece.y + j):
                         return False
-                    else:
-                        self.current_piece.x += 1
-                        return True
+                    if self.board[self.current_piece.x + i + 1][self.current_piece.y + j] != None:
+                        return False
+                    
+       
+        self.current_piece.x += 1
+        return True
 
     def attempt_move_left(self):
         for i in range(0, self.current_piece.size):
             for j in range(0, self.current_piece.size):
-                if self.current_piece.rotations[i, (self.current_piece.get_next_rotation() * self.current_piece.size) + j][0] == 0:
+                if self.current_piece.rotations[i, (self.current_piece.rot_index * self.current_piece.size) + j][0] == 0:
                     if self.current_piece.point_out_of_bounds(self.current_piece.x + i - 1, self.current_piece.y + j):
                         return False
-                    else:
-                        self.current_piece.x -= 1
-                        return True
+                    if self.board[self.current_piece.x + i - 1][self.current_piece.y + j] != None:
+                        return False
+        
+        self.current_piece.x -= 1
+        return True
 
     def handle_keydown(self, key):
         if key == pygame.K_RIGHT:
@@ -227,6 +242,7 @@ class GameState:
 
     def draw_background(self):
         screen.fill((0, 0, 0))
+        pygame.draw.rect(screen, (255, 0, 0), pygame.Rect(0, 0, self.board_width * 16, self.board_height * 16))
 
     def draw_screen(self):
         self.draw_background()
