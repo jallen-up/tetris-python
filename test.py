@@ -4,7 +4,15 @@ import time
 
 from PIL import Image
 
-block = pygame.image.load("block.png")
+blue = pygame.image.load("blue.png")
+yellow = pygame.image.load("yellow.png")
+orange = pygame.image.load("orange.png")
+cyan = pygame.image.load("cyan.png")
+purple = pygame.image.load("purple.png")
+green = pygame.image.load("green.png")
+pink = pygame.image.load("pink.png")
+# TODO: Get tile_size from the actual image
+tile_size = 16
 screen = pygame.display.set_mode((600, 480))
 
 wallkick_offsets = [[(0, 0), (-1, 0), (-1, 1), (0, -2), (-1, -2)],
@@ -32,29 +40,29 @@ class Piece:
         self.rot_index = 0
         self.x = 4
         self.y = 0
-        self.game_state = state
+        self.state = state
 
         if (self.shape == self.I_PIECE):
             im = Image.open('i.png')
-            self.color = "Blue"
+            self.color = blue
         elif (self.shape == self.O_PIECE):
             im = Image.open('o.png')
-            self.color = "Yellow"
+            self.color = yellow
         elif (self.shape == self.LEFT_L_PIECE):
             im = Image.open('left_l.png')
-            self.color = "Orange"
+            self.color = orange
         elif (self.shape == self.RIGHT_L_PIECE):
             im = Image.open('right_l.png')
-            self.color = "Cyan"
+            self.color = cyan
         elif (self.shape == self.T_PIECE):
             im = Image.open('t.png')
-            self.color = "Purple"
+            self.color = purple
         elif (self.shape == self.LEFT_J_PIECE):
             im = Image.open('left_j.png')
-            self.color = "Green"
+            self.color = green
         elif (self.shape == self.RIGHT_J_PIECE):
             im = Image.open('right_j.png')
-            self.color = "Pink"
+            self.color = pink
         else:
             print("Invalid piece type")
             return None
@@ -69,26 +77,36 @@ class Piece:
 
         return ret
 
-    def point_out_of_bounds(self, x, y):
-        if x > self.game_state.board_width - 1:
+    def block_oob(self, x, y):
+        if x > self.state.board_width - 1:
             return True
         elif x < 0:
             return True
-        elif y > self.game_state.board_height - 1:
+        elif y > self.state.board_height - 1:
             return True
         elif y < 0:
             return True
         else:
             return False
 
-    def rotation_unobstructed(self, test):
+    def has_block_at(self, x, y, rot_index):
+        return self.rotations[x, (rot_index * self.size) + y][0] == 0
+
+    def get_blocks(self, rot_index):
+        blocks = []
         for i in range(0, self.size):
             for j in range(0, self.size):
-                if self.rotations[i, (self.get_next_rotation() * self.size) + j][0] == 0:
-                        if self.point_out_of_bounds(self.x + i + test[0], self.y + j + test[1]):
-                            return False
-                        if self.game_state.board[self.x + i + test[0]][self.y + j + test[1]] != None:
-                            return False
+                if self.has_block_at(i, j, rot_index):
+                    blocks.append((self.x + i, self.y + j))
+
+        return blocks
+
+    def rotation_unobstructed(self, test):
+        for block in self.get_blocks(self.get_next_rotation()):
+            if self.block_oob(block[0] + test[0], block[1] + test[1]):
+                return False
+            if self.state.board[block[0] + test[0]][block[1] + test[1]]:
+                return False
 
         return True
 
@@ -112,22 +130,23 @@ class Piece:
                 self.rot_index = 0
 
     def draw(self):
-        for i in range(0, self.size):
-            for j in range(0, self.size):
-                if self.rotations[i, (self.rot_index * self.size) + j][0] == 0:
-                    screen.blit(block, (self.x * 16 + i * 16, self.y * 16 + j * 16))
+        for block in self.get_blocks(self.rot_index):
+            screen.blit(self.color, (block[0] * tile_size, block[1] * tile_size))
 
 class Block:
     def __init__(self, color):
         self.color = color
+
+    def draw(self, x, y):
+        screen.blit(self.color, (x * tile_size, y * tile_size))
 
 class GameState:
     def __init__(self):
         self.running = True
         self.tick_count = 0
         self.tick_mod = 25
-        self.current_piece = Piece(self)
-        if (self.current_piece == None):
+        self.piece = Piece(self)
+        if (self.piece == None):
             print("Failed to create piece")
         self.init_board()
 
@@ -135,7 +154,7 @@ class GameState:
         self.board_width = 10
         self.board_height = 20
 
-        self.board = [[None for y in range(self.board_height + 1)] for x in range(self.board_width + 1)]
+        self.board = [[None for y in range(self.board_height + 1)] for y in range(self.board_width + 1)]
 
     def tick(self):
         self.tick_count += 1
@@ -149,7 +168,7 @@ class GameState:
 
         if (self.tick_count % self.tick_mod == 0):
             if self.drop_piece() == 1:
-                self.current_piece = Piece(self)
+                self.piece = Piece(self)
                 num_rows = self.check_filled_rows()
             self.tick_count = 0
 
@@ -177,28 +196,23 @@ class GameState:
         return ret
 
     def attempt_move_right(self):
-        for i in range(0, self.current_piece.size):
-            for j in range(0, self.current_piece.size):
-                if self.current_piece.rotations[i, (self.current_piece.rot_index * self.current_piece.size) + j][0] == 0:
-                    if self.current_piece.point_out_of_bounds(self.current_piece.x + i + 1, self.current_piece.y + j):
-                        return False
-                    if self.board[self.current_piece.x + i + 1][self.current_piece.y + j] != None:
-                        return False
+        for block in self.piece.get_blocks(self.piece.rot_index):            
+            if self.piece.block_oob(block[0] + 1, block[1]):
+                return False
+            if self.board[block[0] + 1][block[1]] != None:
+                return False
                     
-       
-        self.current_piece.x += 1
+        self.piece.x += 1
         return True
 
     def attempt_move_left(self):
-        for i in range(0, self.current_piece.size):
-            for j in range(0, self.current_piece.size):
-                if self.current_piece.rotations[i, (self.current_piece.rot_index * self.current_piece.size) + j][0] == 0:
-                    if self.current_piece.point_out_of_bounds(self.current_piece.x + i - 1, self.current_piece.y + j):
-                        return False
-                    if self.board[self.current_piece.x + i - 1][self.current_piece.y + j] != None:
-                        return False
+        for block in self.piece.get_blocks(self.piece.rot_index):            
+            if self.piece.block_oob(block[0] - 1, block[1]):
+                return False
+            if self.board[block[0] - 1][block[1]] != None:
+                return False
         
-        self.current_piece.x -= 1
+        self.piece.x -= 1
         return True
 
     def handle_keydown(self, key):
@@ -207,47 +221,41 @@ class GameState:
         elif key == pygame.K_LEFT:
             self.attempt_move_left()
         elif key == pygame.K_UP:
-            self.current_piece.rotate(self.board_width, self.board_height)
+            self.piece.rotate(self.board_width, self.board_height)
 
     def handle_keyup(self, key):
         pass
 
-    # TODO: Clean this up
     def drop_piece(self):
-        for i in range(0, self.current_piece.size):
-            for j in range(0, self.current_piece.size):
-                if self.current_piece.rotations[i, (self.current_piece.rot_index * self.current_piece.size) + j][0] == 0:
-                    if self.current_piece.y + j + 1 > self.board_height - 1:
-                        self.lock_piece()
-                        return 1
-                    if self.board[self.current_piece.x + i][self.current_piece.y + j + 1] != None:
-                        self.lock_piece()
-                        return 1
+        for block in self.piece.get_blocks(self.piece.rot_index):
+            if block[1] + 1 > self.board_height - 1:
+                self.lock_piece()
+                return 1
+            if self.board[block[0]][block[1] + 1] != None:
+                self.lock_piece()
+                return 1
 
-        self.current_piece.y += 1
+        self.piece.y += 1
         return 0
 
-    # TODO: Clean this up...
     def lock_piece(self):
-        for i in range(0, self.current_piece.size):
-            for j in range(0, self.current_piece.size):
-                if self.current_piece.rotations[i, (self.current_piece.rot_index * self.current_piece.size) + j][0] == 0:
-                    self.board[self.current_piece.x + i][self.current_piece.y + j] = Block(self.current_piece.color)
-                     
+        for block in self.piece.get_blocks(self.piece.rot_index):
+            self.board[block[0]][block[1]] = Block(self.piece.color)
+                    
     def draw_board(self):
         for i in range(self.board_width):
             for j in range(self.board_height):
                 if self.board[i][j] != None:
-                    screen.blit(block, (i * 16, j * 16))
+                    self.board[i][j].draw(i, j)
 
     def draw_background(self):
         screen.fill((0, 0, 0))
-        pygame.draw.rect(screen, (255, 0, 0), pygame.Rect(0, 0, self.board_width * 16, self.board_height * 16))
+        pygame.draw.rect(screen, (255, 255, 255), pygame.Rect(0, 0, self.board_width * 16, self.board_height * 16))
 
     def draw_screen(self):
         self.draw_background()
         self.draw_board()
-        self.current_piece.draw()
+        self.piece.draw()
         pygame.display.flip()
             
 def main():
