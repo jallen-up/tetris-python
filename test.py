@@ -11,10 +11,17 @@ cyan = pygame.image.load("cyan.png")
 purple = pygame.image.load("purple.png")
 green = pygame.image.load("green.png")
 pink = pygame.image.load("pink.png")
+bkgd = pygame.image.load("block_bak.png")
 # TODO: Get tile_size from the actual image
 tile_size = 16
-screen = pygame.display.set_mode((600, 480))
+pygame.font.init()
+game_font = pygame.font.SysFont('Arial', 20)
 
+screen_width = 600
+screen_height = 480
+screen = pygame.display.set_mode((screen_width, screen_height))
+ 
+# Lists of offsets to try when we have an invalid rotation
 wallkick_offsets = [[(0, 0), (-1, 0), (-1, 1), (0, -2), (-1, -2)],
                     [(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)],
                     [(0, 0), (1, 0), (1, 1), (0, -2), (1, -2)],
@@ -131,24 +138,35 @@ class Piece:
 
     def draw(self):
         for block in self.get_blocks(self.rot_index):
-            screen.blit(self.color, (block[0] * tile_size, block[1] * tile_size))
+            screen.blit(self.color, (self.state.board_x + (block[0] * tile_size), self.state.board_y + (block[1] * tile_size)))
 
 class Block:
-    def __init__(self, color):
+    def __init__(self, color, state):
         self.color = color
+        self.state = state
 
     def draw(self, x, y):
-        screen.blit(self.color, (x * tile_size, y * tile_size))
+        screen.blit(self.color, (self.state.board_x + (x * tile_size), self.state.board_y + (y * tile_size)))
 
 class GameState:
     def __init__(self):
         self.running = True
         self.tick_count = 0
-        self.tick_mod = 25
+        self.tick_thresh = 150
         self.piece = Piece(self)
         if (self.piece == None):
             print("Failed to create piece")
         self.init_board()
+        self.board_x = 100
+        self.board_y = 100
+        self.score = 0
+        self.level = 0
+        self.lines_cleared = 0
+        self.speedy = False
+        self.speedy_thresh = 15
+        pygame.draw.rect(screen, (255, 255, 255), pygame.Rect(self.board_x, self.board_y, self.board_width * 16, self.board_height * 16))
+        self.end_game = True
+        self.game_over = False
 
     def init_board(self):
         self.board_width = 10
@@ -156,6 +174,56 @@ class GameState:
 
         self.board = [[None for y in range(self.board_height + 1)] for y in range(self.board_width + 1)]
 
+    def display_start_screen(self):
+        go = True
+        while go:
+            screen.fill((0, 0, 0))
+            mouse = pygame.mouse.get_pos()
+            
+            # TODO: Improve size and position of the game over screen
+            rect = pygame.Rect(screen_width / 2, (screen_height / 2) + 25, 100, 25)
+            if rect.collidepoint(mouse):
+                if pygame.mouse.get_pressed()[0] == 1:
+                    return
+                pygame.draw.rect(screen, (250, 250, 250), pygame.Rect(screen_width / 2, (screen_height / 2) + 25, 100, 25))
+            else:
+                pygame.draw.rect(screen, (230, 230, 230), pygame.Rect(screen_width / 2, (screen_height / 2) + 25, 100, 25))
+            game_over = game_font.render('Tetris', False, (255, 255, 255))
+            screen.blit(game_over, (screen_width / 2, screen_height / 2))
+            game_over = game_font.render('Play Game', False, (0, 0, 0))
+            screen.blit(game_over, (screen_width / 2, (screen_height / 2) + 25))
+            pygame.display.flip()
+
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    quit()
+
+    def display_game_over_screen(self):
+        go = True
+        while go:
+            screen.fill((0, 0, 0))
+            mouse = pygame.mouse.get_pos()
+            
+            # TODO: Improve size and position of the game over screen
+            rect = pygame.Rect(screen_width / 2, (screen_height / 2) + 25, 100, 25)
+            if rect.collidepoint(mouse):
+                if pygame.mouse.get_pressed()[0] == 1:
+                    return
+                pygame.draw.rect(screen, (250, 250, 250), pygame.Rect(screen_width / 2, (screen_height / 2) + 25, 100, 25))
+            else:
+                pygame.draw.rect(screen, (230, 230, 230), pygame.Rect(screen_width / 2, (screen_height / 2) + 25, 100, 25))
+            game_over = game_font.render('Game Over', False, (255, 255, 255))
+            screen.blit(game_over, (screen_width / 2, screen_height / 2))
+            game_over = game_font.render('Play Again', False, (0, 0, 0))
+            screen.blit(game_over, (screen_width / 2, (screen_height / 2) + 25))
+            pygame.display.flip()
+
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    quit()
+        
     def tick(self):
         self.tick_count += 1
         for event in pygame.event.get():
@@ -166,10 +234,36 @@ class GameState:
             elif event.type == pygame.KEYUP:
                 self.handle_keyup(event.key)
 
-        if (self.tick_count % self.tick_mod == 0):
+        # BUG: "speedy" speed is not consistent across different levels
+        self.tick_count += self.level + 1
+        if self.tick_count >= self.tick_thresh or (self.speedy and self.tick_count >= self.speedy_thresh):
             if self.drop_piece() == 1:
+                if self.end_game:
+                    self.game_over = True
+                    self.display_game_over_screen()
+                    return 1
+                
                 self.piece = Piece(self)
+                self.end_game = True
                 num_rows = self.check_filled_rows()
+                if num_rows == 4:
+                    self.score += 1200 * (self.level + 1)
+                elif num_rows == 3:
+                    self.score += 600 * (self.level + 1)
+                elif num_rows == 2:
+                    self.score += 100 * (self.level + 1)
+                elif num_rows == 1:
+                    self.score += 40 * (self.level + 1)
+
+                self.lines_cleared += num_rows
+                if self.lines_cleared >= 10:
+                    if self.level < 29:
+                        self.level += 1
+                        self.lines_cleared = 0
+            else:
+                if self.end_game:
+                    self.end_game = False
+                    
             self.tick_count = 0
 
         self.draw_screen()
@@ -222,9 +316,12 @@ class GameState:
             self.attempt_move_left()
         elif key == pygame.K_UP:
             self.piece.rotate(self.board_width, self.board_height)
+        elif key == pygame.K_DOWN:
+            self.speedy = True
 
     def handle_keyup(self, key):
-        pass
+        if key == pygame.K_DOWN:
+            self.speedy = False
 
     def drop_piece(self):
         for block in self.piece.get_blocks(self.piece.rot_index):
@@ -240,17 +337,23 @@ class GameState:
 
     def lock_piece(self):
         for block in self.piece.get_blocks(self.piece.rot_index):
-            self.board[block[0]][block[1]] = Block(self.piece.color)
+            self.board[block[0]][block[1]] = Block(self.piece.color, self)
                     
     def draw_board(self):
         for i in range(self.board_width):
             for j in range(self.board_height):
                 if self.board[i][j] != None:
                     self.board[i][j].draw(i, j)
+                else:
+                    screen.blit(bkgd, (self.board_x + (i * tile_size), self.board_y + (j * tile_size)))
 
     def draw_background(self):
         screen.fill((0, 0, 0))
-        pygame.draw.rect(screen, (255, 255, 255), pygame.Rect(0, 0, self.board_width * 16, self.board_height * 16))
+        pygame.draw.rect(screen, (255, 255, 255), pygame.Rect(self.board_x, self.board_y, self.board_width * 16, self.board_height * 16))
+        score = game_font.render('Score: %s' % self.score, False, (255, 255, 255))
+        screen.blit(score, (400, 200))
+        level = game_font.render('Level: %s' % self.level, False, (255, 255, 255))
+        screen.blit(level, (400, 150))
 
     def draw_screen(self):
         self.draw_background()
@@ -262,10 +365,12 @@ def main():
     pygame.init()
     state = GameState()
 
+    state.display_start_screen()
     running = True
     while state.running:
-        state.tick()
-        time.sleep(0.01)
+        if state.tick() == 1:
+            state = GameState()
+        time.sleep(0.005)
 
 
 if __name__=="__main__":
