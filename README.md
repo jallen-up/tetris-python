@@ -1,1 +1,3 @@
-# python-test
+Basic tetris implementation
+
+Work in progress
